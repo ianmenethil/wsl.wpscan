@@ -1,0 +1,10 @@
+config.yaml
+cache/
+__pycache__
+cookies/
+data/
+*.yaml
+*.csv
+logs/wpscan.log
+*.log
+json_to_csv.py
