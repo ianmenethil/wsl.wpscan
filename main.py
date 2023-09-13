@@ -22,14 +22,20 @@ CONFIGURATION_FILE = 'config.yaml'
 ERROR_STRINGS = ['The API token provided is invalid', 'Your API limit has been reached']
 SCAN_START_TIME: datetime = datetime.now()
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    encoding="utf-8",
-    format="%(asctime)s|%(levelname)s|%(message)s",
-    datefmt=DATE_FORMAT,
-    handlers=[logging.StreamHandler(), logging.FileHandler("logs/wpscan.log", 'a', 'utf-8')]
-    )
-logging.getLogger("").setLevel(logging.INFO)
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.DEBUG)
+
+file_handler = logging.FileHandler("logs/wpscan.log", 'a', 'utf-8')
+file_handler.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter("%(asctime)s|%(levelname)s|%(message)s", datefmt=DATE_FORMAT)
+stream_handler.setFormatter(formatter)
+file_handler.setFormatter(formatter)
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
 
 def read_config_file():  # Read config.yaml file.
     """ Returns: dict: Configuration data if successful, None otherwise."""
@@ -37,10 +43,10 @@ def read_config_file():  # Read config.yaml file.
         with open(file=CONFIGURATION_FILE, mode='r', encoding='utf-8') as file:
             return yaml.safe_load(stream=file)
     except FileNotFoundError:
-        logging.error("Config file not found: %s", CONFIGURATION_FILE)
+        logger.error("Config file not found: %s", CONFIGURATION_FILE)
         return None
     except yaml.YAMLError:
-        logging.error("Error in configuration file:")
+        logger.error("Error in configuration file:")
         return None
 
 def format_timedelta(fmt_timedelta: timedelta):  # Format timedelta for human readability
@@ -56,30 +62,30 @@ def format_timedelta(fmt_timedelta: timedelta):  # Format timedelta for human re
 def get_domains_to_scan(config):  # Get list of domains to scan.
     """ Args: config (dict): The configuration dictionary.  Returns: list: A list of domain names to scan. """
     default_domains = config['DOMAIN_LIST']
-    logging.info('Default domains:\n%s', '\n'.join(default_domains))
+    logger.info('Default domains:\n%s', '\n'.join(default_domains))
     domains = input("Enter domain names separated by commas (or leave blank to use domains from config): ").strip()
     domains_to_scan = domains.split(",") if domains else default_domains
-    logging.info('Domains:\n%s', '\n'.join(domains_to_scan))
+    logger.info('Domains:\n%s', '\n'.join(domains_to_scan))
     return domains_to_scan
 
 def get_email_recipients(config):  # Get email recipients
     """ Args: config (dict): The configuration dictionary. Returns: list: A list of email addresses of recipients. """
-    logging.info("Default recipient email '%s'", config['DEFAULT_RECIPIENT_EMAIL_LIST'])
+    logger.info("Default recipient email '%s'", config['DEFAULT_RECIPIENT_EMAIL_LIST'])
     if recipients := input("Enter recipient email addresses separated by commas (or leave blank to use emails from config): ").strip():
         recipients_list = recipients.split(",")
     else:
         recipients_list = config['DEFAULT_RECIPIENT_EMAIL_LIST'] if isinstance(config['DEFAULT_RECIPIENT_EMAIL_LIST'], list) else [config['DEFAULT_RECIPIENT_EMAIL_LIST']]
-    logging.info("Recipients: %s", recipients_list)
+    logger.info("Recipients: %s", recipients_list)
     return recipients_list
 
 def user_email_option():  # Get user email preference
     """ Returns: bool: True if the user chooses to email the output, False otherwise. """
-    logging.info("Default email option is set as 'Do not send'")
+    logger.info("Default email option is set as 'Do not send'")
     option: str = input("""Do you want to email the output?
 1) No(default) | 2) Yes: """).strip()
     if not option:
         option = "1"
-    logging.info("User chose option %s", option)
+    logger.info("User chose option %s", option)
     return option == '2'
 
 def run_wpscan(domain, api_key, key_index):  # Run wpscan subprocess
@@ -104,12 +110,11 @@ def run_wpscan(domain, api_key, key_index):  # Run wpscan subprocess
         wpscan_output_file = os.path.join(OUTPUT_DIRECTORY, f"{domain}_{date_string}_WPScan_v{version}.{wpscan_file_extension}")
         # filenames.append(wpscan_output_file)
     filenames.append(wpscan_output_file)
-    logging.info('Using API key #%d for domain: %s', key_index + 1, domain)
+    logger.info('Using API key #%d for domain: %s', key_index + 1, domain)
     command = ['wpscan',
                 '--url', domain,
                 # '--verbose',
                 '--no-banner',
-                '--random-user-agent',
                 '--update',
                 '--detection-mode', 'mixed',
                 # '--scope', '*.' + domain,
@@ -134,31 +139,52 @@ def run_wpscan(domain, api_key, key_index):  # Run wpscan subprocess
     if domain == 'travelpayb2b.com.au':
         command.extend(['--wp-content-dir', '/wp-content/'])
     try:
+        logger.info("Running subprocess with command %s", command)
+        file_handler.flush()
+        logger.info("Setting SCAN_START_TIME to %s, Logs flushed", SCAN_START_TIME)
         filename, output_json_or_error, api_key_error = run_wpscan_subprocess(command, domain, wpscan_output_file)
+        file_handler.flush()
+        logger.info("filename:%s, output_json_or_error:%s, api_key_error:%s\n, logs flushed")
+        logger.info("Running subprocess with filename, output_json_or_error, api_key_error=run_wpscan_subprocess(command, domain, wpscan_output_file), process_id: %s, %s, %s, %s, %s, %s", filename, output_json_or_error, api_key_error, command, domain, wpscan_output_file)
+        file_handler.flush()
+        logger.info("pid %s, logs flushed")
         return [filename], output_json_or_error, api_key_error
     except subprocess.CalledProcessError as e_process_err:
-        logging.error("An unexpected error occurred while scanning domain '%s': %s", domain, str(e_process_err))
+        logger.error("An unexpected error occurred while scanning domain '%s': %s", domain, str(e_process_err))
         return filenames, str(e_process_err), True
 
-def run_wpscan_subprocess(command, domain, wpscan_output_file):  # Helper to run wpscan subprocess
-    """ Args:   command
-                domain (str): The domain to scan.
-                wpscan_output_file (str): The filename of the WPScan output file."""
-    command_str = ' '.join(command)
-    command_list = command_str.split()
-    logging.debug('Scanning domain %s... Scan started at %s with following command: %s', domain, SCAN_START_TIME, command_list)
+def run_wpscan_subprocess(command, domain, wpscan_output_file):
+    logger.debug('Scanning domain %s... Scan started at %s with following command: %s', domain, SCAN_START_TIME, command)
+    file_handler.flush()
     try:
-        output = subprocess.check_output(command, stderr=subprocess.STDOUT, text=True)
-        logging.info(output)
+        # process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        file_handler.flush()
+        output_lines = []
+        if process.stdout:
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    logger.info(output.strip())
+                    output_lines.append(output.strip())
+            process.communicate()  # Make sure we wait until subprocess is done
+
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, command)
+
+        logger.info('\n'.join(output_lines))
+
         return wpscan_output_file, None, False
     except subprocess.CalledProcessError as e_process_err:
-        logging.error("An error occurred while scanning domain '%s': %s", domain, e_process_err)
+        logger.error("An error occurred while scanning domain '%s': %s", domain, e_process_err)
         output_json = None
         try:
             with open(wpscan_output_file, 'r', encoding="utf-8") as json_file:
                 output_json = json.load(json_file)
         except (FileNotFoundError, json.JSONDecodeError):
-            logging.error("json FileNotFoundError")
+            logger.error("json FileNotFoundError")
         if output_json:
             if "scan_aborted" in output_json:
                 error_message = output_json.get("scan_aborted")
@@ -173,6 +199,7 @@ def run_wpscan_subprocess(command, domain, wpscan_output_file):  # Helper to run
                 human_readable_diff = format_timedelta(time_difference)
                 return wpscan_output_file, human_readable_diff, False  # Successful scan
         return wpscan_output_file, "Unexpected JSON structure", True  # If neither scan_aborted nor start_time/stop_time are found, return a generic error
+
 
 def process_domain(domain, api_keys, key_index):  # Scan domain with multiple API keys if needed
     api_key_error = True
@@ -222,7 +249,7 @@ This is an automated email. For app-related technical issues, contact ian@zenith
     html_part = MIMEText(body_html, "html")
     message.attach(text_part)
     message.attach(html_part)
-    logging.debug("Debug: All output files before attachments - %s", {output_files})
+    logger.debug("Debug: All output files before attachments - %s", {output_files})
     for output_file in output_files:
         if not output_file:
             continue
@@ -235,39 +262,39 @@ This is an automated email. For app-related technical issues, contact ian@zenith
                 attachment = MIMEApplication(file_contents, Name=os.path.basename(output_file))
                 attachment['Content-Disposition'] = f'attachment; filename="{os.path.basename(output_file)}"'
                 message.attach(attachment)
-            logging.debug("Attached file: %s", output_file)
+            logger.debug("Attached file: %s", output_file)
         except FileNotFoundError as file_not_found_err:
-            logging.error("Failed to read and attach file: %s. Error: %s", output_file, str(file_not_found_err))
+            logger.error("Failed to read and attach file: %s. Error: %s", output_file, str(file_not_found_err))
         except PermissionError as permission_err:
-            logging.error("Failed to read and attach file: %s. Error: %s", output_file, str(permission_err))
+            logger.error("Failed to read and attach file: %s. Error: %s", output_file, str(permission_err))
         except ValueError as value_err:
-            logging.error("Failed due to a value error. Error: %s", str(value_err))
+            logger.error("Failed due to a value error. Error: %s", str(value_err))
         except Exception as err_exception:  # pylint: disable=broad-except
-            logging.error("Failed to read and attach file: %s. Error: %s", output_file, str(err_exception))
+            logger.error("Failed to read and attach file: %s. Error: %s", output_file, str(err_exception))
     try:
         with smtplib.SMTP(config['SMTPSERVER'], int(config['SMTPPORT']), local_hostname='localhost') as server:
             server.starttls()
             server.login(user=config['SENDER_EMAIL'], password=config['SENDER_PASSWORD'])
             server.sendmail(from_addr=config['SENDER_EMAIL'], to_addrs=recipient_emails, msg=message.as_string())
     except smtplib.SMTPException as error:
-        logging.error("An error occurred while sending the email: %s", error)
+        logger.error("An error occurred while sending the email: %s", error)
     else:
-        logging.info("Email sent with attachments.")
+        logger.info("Email sent with attachments.")
 
 def scan_for_json_files():  # Scan directory for JSON files and convert them to CSV files
     json_files = [file for file in os.listdir(OUTPUT_DIRECTORY) if file.endswith(INPUT_FILE_EXTENSION)]
     if not json_files:
-        logging.error("No JSON files found in this directory.")
+        logger.error("No JSON files found in this directory.")
         return
-    logging.info('Scanning for JSON files in %s', OUTPUT_DIRECTORY)
+    logger.info('Scanning for JSON files in %s', OUTPUT_DIRECTORY)
     for json_file in json_files:
-        logging.info('Found JSON file: %s', json_file)
+        logger.info('Found JSON file: %s', json_file)
         file_path = os.path.join(OUTPUT_DIRECTORY, json_file)
         with open(file_path, encoding='utf-8') as json_file:
             try:
                 data = json.load(json_file)
             except json.JSONDecodeError:
-                logging.error('Invalid JSON file: %s', json_file.name)
+                logger.error('Invalid JSON file: %s', json_file.name)
                 continue
             csv_file_name = os.path.join(json_file.name[:-5] + ".csv")
             with open(csv_file_name, "w", newline="", encoding="utf-8") as csv_file:
@@ -277,8 +304,8 @@ def scan_for_json_files():  # Scan directory for JSON files and convert them to 
                         writer.writerow([key, *value])
                     else:
                         writer.writerow([key, value])
-                logging.info("File converted.")
-    logging.info("All files converted.")
+                logger.info("File converted.")
+    logger.info("All files converted.")
 
 def archive_json_files():  # Archive JSON files
     if not os.path.exists(ARCHIVE_DIR):
@@ -289,14 +316,14 @@ def archive_json_files():  # Archive JSON files
         source_path = os.path.join(OUTPUT_DIRECTORY, json_file)
         destination_path = os.path.join(ARCHIVE_DIR, json_file)
         os.rename(source_path, destination_path)
-    logging.info("Archived %d JSON files to %s", len(json_files), ARCHIVE_DIR)
+    logger.info("Archived %d JSON files to %s", len(json_files), ARCHIVE_DIR)
 
 def main():  # Main function
     config = read_config_file()
     if config is None:
-        logging.error("Error reading config file. Exiting.")
+        logger.error("Error reading config file. Exiting.")
         return
-    logging.info('Main started')
+    logger.info('Main started')
     email_option: bool = user_email_option()  # Get user email preference
     recipient_emails = get_email_recipients(config) if email_option else []  # Get recipient emails
     domains_to_scan = get_domains_to_scan(config)  # Get list of domains to scan
@@ -311,10 +338,12 @@ def main():  # Main function
     if email_option:  # Delay for email attachments to be created
         time.sleep(10)
         output_files = [file for extension in ALLOWED_EXTENSIONS for file in glob.glob(OUTPUT_DIRECTORY + f'/*{extension}')]  # Fetch all the output files
-        logging.info("Output files: %s", output_files)
+        logger.info("Output files: %s", output_files)
         send_email(config, recipient_emails, output_files, scan_results)  # Send email with attachments
-        logging.debug("Email sent %s %s %s", config, recipient_emails, scan_results)
+        logger.debug("Email sent %s %s %s", config, recipient_emails, scan_results)
     archive_json_files()  # Archive JSON files
+    file_handler.close()
+
 
 if __name__ == '__main__':
     main()
