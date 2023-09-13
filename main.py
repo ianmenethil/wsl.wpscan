@@ -230,14 +230,27 @@ def send_email(config, recipient_emails, output_files, scan_results):  # Send em
     body_html += """<th style='background-color:#f2f2f2;color:#696969;'>Scanned Domains</th>"""
     body_html += """ <th style='background-color:#f2f2f2;color:#696969;'>Scan Duration</th></tr>"""
     body_text = """WPscans have been completed for the below domains:\n\n"""
-    for filename, output_json_or_error in scan_results:
-        if isinstance(output_json_or_error, str):
-            body_html += f"<tr><td>{filename}</td><td>Scan Duration:{output_json_or_error} seconds</td><td>No error</td></tr>"
-            body_text += f"Filename:{filename}, Scan Duration: {output_json_or_error} seconds, Error: No error\n"
-        else:
-            error = output_json_or_error.get("scan_aborted", "Unknown error")
-            body_html += f"<tr><td>{filename}</td><td>{error}</td></tr>"
-            body_text += f"Filename:{filename}, Scan failed, Error: {error}\n"
+
+    # for filename, output_json_or_error in scan_results:
+    #     if isinstance(output_json_or_error, str):
+    #         body_html += f"<tr><td>{filename}</td><td>Scan Duration:{output_json_or_error} seconds</td><td>No error</td></tr>"
+    #         body_text += f"Filename:{filename}, Scan Duration: {output_json_or_error} seconds, Error: No error\n"
+    #     else:
+    #         error = output_json_or_error.get("scan_aborted", "Unknown error")
+    #         body_html += f"<tr><td>{filename}</td><td>{error}</td></tr>"
+    #         body_text += f"Filename:{filename}, Scan failed, Error: {error}\n"
+
+    for (filenames, output_json_or_error) in scan_results:
+        for filename in filenames:
+            if isinstance(output_json_or_error, str):
+                body_html += f"<tr><td>{filename}</td><td>Scan Duration:{output_json_or_error} seconds</td><td>No error</td></tr>"
+                body_text += f"Filename:{filename}, Scan Duration: {output_json_or_error} seconds, Error: No error\n"
+            else:
+                error = output_json_or_error.get("scan_aborted", "Unknown error")
+                body_html += f"<tr><td>{filename}</td><td>{error}</td></tr>"
+                body_text += f"Filename:{filename}, Scan failed, Error: {error}\n"
+
+
     body_html += """</table><br><p style="font-size: 12px; font-family: 'Open Sans', Arial, sans-serif;">Scan results has been attached for each domain.</p>"""
     body_html += """<p style="color: blue; font-size: 10px; font-family: 'Open Sans', Arial, sans-serif; font-style: italic;">Inbox is not monitored. Please do not reply back.</p><p style="color: blue; font-size: 10px; font-family: 'Open Sans', Arial, sans-serif; font-style: italic;">
 This is an automated email. For app-related technical issues, contact <a href="mailto:ian@zenithpayments.com.au">Ian Menethil</a>.</p>
@@ -330,10 +343,17 @@ def main():  # Main function
     scans_per_key = 1  # Use 1 key per scan
     api_keys = config['API_KEY_LIST']  # Scan each domain with multiple API keys if needed
     scan_results = []
-    for i, domain in enumerate(domains_to_scan):  # Determine the API key to use based on the current domain index
+
+    for i, domain in enumerate(domains_to_scan):
         key_index, _ = divmod(i, scans_per_key)
-        domain_scan_results = process_domain(domain, api_keys, key_index)  # Process the current domain and fetch the results
-        scan_results.extend(domain_scan_results)  # Append the results to the main results list
+        domain_scan_results = process_domain(domain, api_keys, key_index)
+        scan_results.append(domain_scan_results)
+
+    # for i, domain in enumerate(domains_to_scan):  # Determine the API key to use based on the current domain index
+    #     key_index, _ = divmod(i, scans_per_key)
+    #     domain_scan_results = process_domain(domain, api_keys, key_index)  # Process the current domain and fetch the results
+    #     scan_results.extend(domain_scan_results)  # Append the results to the main results list
+
     scan_for_json_files()  # Convert JSON files to CSV files
     if email_option:  # Delay for email attachments to be created
         time.sleep(10)

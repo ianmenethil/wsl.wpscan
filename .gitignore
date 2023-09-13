@@ -9,3 +9,4 @@ logs/wpscan.log
 *.log
 json_to_csv.py
 note.txt
+wsl.wpscan - Shortcut.lnk
