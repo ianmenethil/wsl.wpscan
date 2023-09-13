@@ -10,3 +10,9 @@ logs/wpscan.log
 json_to_csv.py
 note.txt
 wsl.wpscan - Shortcut.lnk
+.lnk
+test/
+wpscan - Shortcut.lnk
+data1/
+logs/
+json2csv.py

@@ -138,6 +138,8 @@ def run_wpscan(domain, api_key, key_index):  # Run wpscan subprocess
 
     if domain == 'travelpayb2b.com.au':
         command.extend(['--wp-content-dir', '/wp-content/'])
+    if domain == 'b2bpay.com.au':
+        command.extend(['--ignore-main-redirect'])
     try:
         logger.info("Running subprocess with command %s", command)
         file_handler.flush()
@@ -147,7 +149,6 @@ def run_wpscan(domain, api_key, key_index):  # Run wpscan subprocess
         logger.info("filename:%s, output_json_or_error:%s, api_key_error:%s\n, logs flushed")
         logger.info("Running subprocess with filename, output_json_or_error, api_key_error=run_wpscan_subprocess(command, domain, wpscan_output_file), process_id: %s, %s, %s, %s, %s, %s", filename, output_json_or_error, api_key_error, command, domain, wpscan_output_file)
         file_handler.flush()
-        logger.info("pid %s, logs flushed")
         return [filename], output_json_or_error, api_key_error
     except subprocess.CalledProcessError as e_process_err:
         logger.error("An unexpected error occurred while scanning domain '%s': %s", domain, str(e_process_err))
@@ -199,7 +200,6 @@ def run_wpscan_subprocess(command, domain, wpscan_output_file):
                 human_readable_diff = format_timedelta(time_difference)
                 return wpscan_output_file, human_readable_diff, False  # Successful scan
         return wpscan_output_file, "Unexpected JSON structure", True  # If neither scan_aborted nor start_time/stop_time are found, return a generic error
-
 
 def process_domain(domain, api_keys, key_index):  # Scan domain with multiple API keys if needed
     api_key_error = True
@@ -364,7 +364,5 @@ def main():  # Main function
     archive_json_files()  # Archive JSON files
     file_handler.close()
 
-
 if __name__ == '__main__':
     main()
-# test
