@@ -139,15 +139,12 @@ def run_wpscan(domain, api_key, key_index):  # Run wpscan subprocess
     if domain == 'travelpayb2b.com.au':
         command.extend(['--wp-content-dir', '/wp-content/'])
     if domain == 'b2bpay.com.au':
-        command.extend(['--ignore-main-redirect'])
+        command.extend(['--wp-content-dir', '/wp-content/'])
     try:
-        logger.info("Running subprocess with command %s", command)
         file_handler.flush()
         logger.info("Setting SCAN_START_TIME to %s, Logs flushed", SCAN_START_TIME)
         filename, output_json_or_error, api_key_error = run_wpscan_subprocess(command, domain, wpscan_output_file)
         file_handler.flush()
-        logger.info("filename:%s, output_json_or_error:%s, api_key_error:%s\n, logs flushed")
-        logger.info("Running subprocess with filename, output_json_or_error, api_key_error=run_wpscan_subprocess(command, domain, wpscan_output_file), process_id: %s, %s, %s, %s, %s, %s", filename, output_json_or_error, api_key_error, command, domain, wpscan_output_file)
         file_handler.flush()
         return [filename], output_json_or_error, api_key_error
     except subprocess.CalledProcessError as e_process_err:
@@ -246,10 +243,13 @@ def send_email(config, recipient_emails, output_files, scan_results):  # Send em
                 body_html += f"<tr><td>{filename}</td><td>Scan Duration:{output_json_or_error} seconds</td><td>No error</td></tr>"
                 body_text += f"Filename:{filename}, Scan Duration: {output_json_or_error} seconds, Error: No error\n"
             else:
-                error = output_json_or_error.get("scan_aborted", "Unknown error")
+                if isinstance(output_json_or_error, dict):
+                    error = output_json_or_error.get("scan_aborted", "Unknown error")
+                else:
+                    error = "Unknown error"
+                # error = output_json_or_error.get("scan_aborted", "Unknown error")
                 body_html += f"<tr><td>{filename}</td><td>{error}</td></tr>"
                 body_text += f"Filename:{filename}, Scan failed, Error: {error}\n"
-
 
     body_html += """</table><br><p style="font-size: 12px; font-family: 'Open Sans', Arial, sans-serif;">Scan results has been attached for each domain.</p>"""
     body_html += """<p style="color: blue; font-size: 10px; font-family: 'Open Sans', Arial, sans-serif; font-style: italic;">Inbox is not monitored. Please do not reply back.</p><p style="color: blue; font-size: 10px; font-family: 'Open Sans', Arial, sans-serif; font-style: italic;">
@@ -362,7 +362,6 @@ def main():  # Main function
         send_email(config, recipient_emails, output_files, scan_results)  # Send email with attachments
         logger.debug("Email sent %s %s %s", config, recipient_emails, scan_results)
     archive_json_files()  # Archive JSON files
-    file_handler.close()
 
 if __name__ == '__main__':
     main()
