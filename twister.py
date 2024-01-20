@@ -33,18 +33,15 @@ PrePaid_domains = [
 domain_configurations = {"ZenPay": ZenPay_domains, "SmartCentral": SmartCentral_domains, "TEST ONLY": TEST_ONLY_domains, "PrePaid": PrePaid_domains}  # pylint: disable=line-too-long
 
 
-
-
 def checkIfFileExists(outputfile) -> Any | str:
-    logger.info(f"Checking if {outputfile} exists...")
+    # logger.info(f"Checking if {outputfile} exists...")
     base, ext = os.path.splitext(outputfile)
     counter = 1
     while os.path.isfile(outputfile):
         logger.info(f"{outputfile} exists.")
         outputfile = f"{base}_{counter}{ext}"
         counter += 1
-    logger.info(f"{outputfile} does not exist.")
-    logger.info(f"Returning outputfile: {outputfile}")
+    logger.info(f"Outputfile: {outputfile}")
     return outputfile
 
 
@@ -59,8 +56,8 @@ def run_dnstwist_for_domain(currentDomain, output_folder) -> None:
     if not os.path.exists(screenshots_folder):
         os.makedirs(screenshots_folder)
     runTwister = [
-        "dnstwist", "--all", "--banners", "--geoip", "--lsh", "tlsh", "--lsh-url", currentDomain, "--mxcheck", "--registered", "--phash",
-        "--phash-url", currentDomain, "--screenshots", screenshots_folder, "--threads", "10", "--fuzzers", allFuzzers, "--nameservers",
+        "dnstwist", "--all", "--banners", "--geoip", "--format", "csv", "--lsh", "tlsh", "--lsh-url", currentDomain, "--mxcheck", "--registered",
+        "--phash", "--phash-url", currentDomain, "--screenshots", screenshots_folder, "--threads", "10", "--fuzzers", allFuzzers, "--nameservers",
         "8.8.8.8,1.1.1.1", "--dictionary", dict_file, "--tld", tld_dict_file, "--output", outputFile, currentDomain
     ]
     logger.info(f"Running DNSTwist for {domain_name} with output file {outputFile}")

@@ -58,24 +58,23 @@ domain_configurations = {
     "PrePaid": list(zip(PrePaid_domains, prepaid_config_files))
 }
 
+# def copyFilesFromSrcToDestDir(srcDir, dsetDir) -> Any:
+#     logger.info(f"Copying files from {srcDir} to {dsetDir}")
+#     try:
+#         for file in os.listdir(srcDir):
+#             srcFile = os.path.join(srcDir, file)
+#             destFile = os.path.join(dsetDir, file)
+#             if os.path.isfile(srcFile):
+#                 if not os.path.exists(dsetDir):
+#                     os.makedirs(dsetDir)
+#                 if not os.path.exists(destFile) or (os.path.exists(destFile) and (os.path.getsize(destFile) != os.path.getsize(srcFile))):
+#                     open(destFile, "wb").write(open(srcFile, "rb").read())
+#                     logger.info(f"Copied {srcFile} to {destFile}")
+#                     return True
 
-def copyFilesFromSrcToDestDir(srcDir, dsetDir) -> Any:
-    logger.info(f"Copying files from {srcDir} to {dsetDir}")
-    try:
-        for file in os.listdir(srcDir):
-            srcFile = os.path.join(srcDir, file)
-            destFile = os.path.join(dsetDir, file)
-            if os.path.isfile(srcFile):
-                if not os.path.exists(dsetDir):
-                    os.makedirs(dsetDir)
-                if not os.path.exists(destFile) or (os.path.exists(destFile) and (os.path.getsize(destFile) != os.path.getsize(srcFile))):
-                    open(destFile, "wb").write(open(srcFile, "rb").read())
-                    logger.info(f"Copied {srcFile} to {destFile}")
-                    return True
-
-    except Exception as e:
-        logger.error(f"An error occurred while copying files from {srcDir} to {dsetDir}: {e}")
-        return False
+#     except Exception as e:
+#         logger.error(f"An error occurred while copying files from {srcDir} to {dsetDir}: {e}")
+#         return False
 
 
 def checkIfFileExists(outputfile) -> Any | str:
@@ -141,19 +140,18 @@ def run_wpwatcher(domain_list_name: str) -> None:
         logger.error(f"Failed to execute WPWatcher for {domain_list_name}: {e}")
 
 
-def delAllFilesInDir(dir_path) -> None:
-    logger.info(f"Deleting all files in {dir_path}")
-    try:
-        for file in os.listdir(dir_path):
-            file_path = os.path.join(dir_path, file)
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-    except Exception as e:
-        logger.error(f"Failed to delete all files in {dir_path}: {e}")
+# def delAllFilesInDir(dir_path) -> None:
+#     logger.info(f"Deleting all files in {dir_path}")
+#     try:
+#         for file in os.listdir(dir_path):
+#             file_path = os.path.join(dir_path, file)
+#             if os.path.isfile(file_path):
+#                 os.remove(file_path)
+#     except Exception as e:
+#         logger.error(f"Failed to delete all files in {dir_path}: {e}")
 
-
-LOGDIR = 'logs'
-EXCELDIR = 'Excel/input'
+# LOGDIR = 'logs'
+# EXCELDIR = 'Excel/input'
 
 
 def main(domain_list_name) -> None:
@@ -161,13 +159,13 @@ def main(domain_list_name) -> None:
         logger.error("No domain list name provided.")
         return
     run_wpwatcher(domain_list_name)
-    copyAll = copyFilesFromSrcToDestDir(LOGDIR, EXCELDIR)
-    if copyAll:
-        logger.info(f"Files copied successfully from {LOGDIR} to {EXCELDIR}")
-        delAllFilesInDir(LOGDIR)
-        logger.info(f"All files deleted from {LOGDIR}")
-    else:
-        logger.error(f"Failed to copy files from {LOGDIR} to {EXCELDIR}")
+    # copyAll = copyFilesFromSrcToDestDir(LOGDIR, EXCELDIR)
+    # if copyAll:
+    #     logger.info(f"Files copied successfully from {LOGDIR} to {EXCELDIR}")
+    #     delAllFilesInDir(LOGDIR)
+    #     logger.info(f"All files deleted from {LOGDIR}")
+    # else:
+    #     logger.error(f"Failed to copy files from {LOGDIR} to {EXCELDIR}")
 
 
 if __name__ == "__main__":

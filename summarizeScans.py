@@ -4,6 +4,7 @@ import logging
 import re
 import shutil
 from typing import Any
+import csv
 from rich.logging import RichHandler
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
@@ -158,14 +159,15 @@ def getAllTxtInDir(indir) -> list[Any]:
 
 
 def delAll(directory, filename_substr) -> bool:
+    deleted = False
     for foldername, _, filenames in os.walk(directory):
         for filename in filenames:
             if filename_substr in filename:
                 file_path = os.path.join(foldername, filename)
                 os.remove(file_path)
                 logger.info(f"Deleted {file_path}")
-                return True
-    return False
+                deleted = True
+    return deleted
 
 
 def copyRecurse(source_dir, destination_dir, extension='.txt') -> bool:
@@ -219,7 +221,7 @@ def setupDirs(outdir, tempdir, backupdir) -> None:
         os.makedirs(backupdir)
 
 
-def cleanLogsHelper(file_path, start_line):  # -> Any:
+def cleanLogsHelper(file_path, start_line) -> Any:
     """ Process a single file and delete all lines before a specific update line. """
     end_line = "DEBUG - Parsing WPScan output"
     try:
@@ -377,40 +379,92 @@ def processFileForResults(txt_filename) -> list[Any]:
     return results
 
 
-def saveToExcel(txt_filename, results, workbook, output_file) -> None:
+def saveToExcel(txt_filename, results, workbook, output_file) -> bool:
     """Save processed results to an Excel file."""
-    sheet = workbook.create_sheet(title=os.path.splitext(os.path.basename(txt_filename))[0])
-    with open(txt_filename, 'r', encoding='utf-8') as file:
-        for i, line in enumerate(file, 1):
-            sanitized_line = sanitize_string(line.strip())
-            sheet.cell(row=i, column=1, value=sanitized_line)
-            # logger.info(f'sanuzed line {sanitized_line}')
-    if 'Results' not in workbook.sheetnames:
-        results_sheet = workbook.create_sheet('Results')
-        headers = ["Filename", "Plugin/Theme", "Vuln Count", "Details", "Interesting Findings"]
-        # headers = ["Plugin/Theme", "Vuln Count", "Details", "Interesting Findings"]
+    try:
+        sheet = workbook.create_sheet(title=os.path.splitext(os.path.basename(txt_filename))[0])
+        with open(txt_filename, 'r', encoding='utf-8') as file:
+            for i, line in enumerate(file, 1):
+                sanitized_line = sanitize_string(line.strip())
+                sheet.cell(row=i, column=1, value=sanitized_line)
+        if 'Results' not in workbook.sheetnames:
+            results_sheet = workbook.create_sheet('Results')
+            headers = ["Filename", "Plugin/Theme", "Vuln Count", "Details", "Interesting Findings"]
+            results_sheet.append(headers)
+        else:
+            results_sheet = workbook['Results']
+        for result in results:
+            row = [
+                result.get('filename', ''),
+                result.get('plugin/theme', ''),
+                result.get('vuln_count', ''),
+                result.get('details', ''),
+                result.get('interesting_findings', '')
+            ]
+            results_sheet.append(row)
+        apply_formatting(results_sheet)
+        workbook.save(output_file)
+        return True
+    except Exception as e:
+        logger.error(f"Error in saveToExcel: {e}")
+        return False
+
+
+def cleanUpCrew(indir, outdir) -> None:
+    try:
+        copy = copyRecurse(indir, outdir, extension='.log')
+        logger.info(f'Copying files from {indir} to {outdir}')
+        if copy:
+            delAll(indir, '.log')
+            logger.info(f'Deleting files from {indir}')
+    except Exception as e:
+        logger.error(f"Error in copyRecurse: {e}")
+
+
+def createTwisterResults(input_dir, output_file) -> bool:
+    try:
+        workbook = openpyxl.Workbook()
+        workbook.remove(workbook.active)  # Remove the default sheet
+
+        all_data = []
+
+        for root, _, files in os.walk(input_dir):
+            logger.info(f'Processing files in {root}')
+            # logger.info(f'Files: {files}')
+            for file in files:
+                if file.endswith('.csv'):
+                    logger.info(f'Processing CSV file {file}')
+                    with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
+                        reader = csv.reader(f)
+                        data = list(reader)
+                        all_data.extend(data)  # Append data for All Results sheet
+                        logger.info(f'Data read from {file}')
+                        sheet = workbook.create_sheet(title=os.path.splitext(file)[0])
+                        logger.info(f'Created sheet {sheet.title}')
+                        for row in data:
+                            sheet.append(row)
+
+        # Create 'All Results' sheet
+        results_sheet = workbook.create_sheet(title='All Results')
+        headers = ['Type', 'Domain', 'IP Address', 'NS', 'MX', 'HTTP', 'SMTP', 'ESMTP', 'PHASH']
         results_sheet.append(headers)
-    else:
-        results_sheet = workbook['Results']
-    for result in results:
-        row = [
-            result.get('filename', ''),
-            result.get('plugin/theme', ''),
-            result.get('vuln_count', ''),
-            result.get('details', ''),
-            result.get('interesting_findings', '')
-        ]
-        results_sheet.append(row)
-    apply_formatting(results_sheet)
-    workbook.save(output_file)
+        for row in all_data:
+            results_sheet.append(row)
+        workbook.save(output_file)
+        return True
+    except Exception as e:
+        logger.error(f"Error in createTwisterResults: {e}")
+        return False
 
 
 def main() -> None:
     TODAYIS = datetime.datetime.now().strftime('%d-%m-%y')
-    OUTDIR, TEMPDIR, BACKUPDIR = 'Excel', 'Excel/temp', f'Excel/backup_{TODAYIS}'
-    delAll(OUTDIR, '.xlsx')
-    output_file = 'results_' + TODAYIS + '.xlsx'
+    OUTDIR, TEMPDIR, TWISTERDIR, BACKUPDIR = 'Excel', 'Excel/temp', 'Excel/DNSTwist', f'Excel/backup_{TODAYIS}'
+    # delAll(OUTDIR, '.xlsx')
+    output_file = 'WPScanResults_' + TODAYIS + '.xlsx'
     OUTFILE = os.path.join(OUTDIR, output_file)
+    tw_output_file = 'DNSTwistResults_' + TODAYIS + '.xlsx'
+    TWISTEROUTFILE = os.path.join(TWISTERDIR, tw_output_file)
     INDIR = 'logs'
     try:
         setupDirs(OUTDIR, TEMPDIR, BACKUPDIR)
@@ -431,6 +485,9 @@ def main() -> None:
         copyRecurse(TEMPDIR, OUTDIR, extension='.txt')
         delAll(TEMPDIR, '.txt')
         delAll(TEMPDIR, '.log')
+        # check if there is anything left in TEMPDIR
+        if not os.listdir(TEMPDIR):
+            logger.info("TEMPDIR is empty")
         workbook = getWorkbook(output_file)
         if 'Sheet' in workbook.sheetnames:
             del workbook['Sheet']
@@ -445,21 +502,48 @@ def main() -> None:
         text_files_processed = False
         try:
             for txt_file in getAllTxtInDir(OUTDIR):
-                logger.info(f"Processing file: {txt_file}")
+                # logger.info(f"Processing file: {txt_file}")
                 try:
                     get_results = processFileForResults(txt_file)
                     saveToExcel(txt_filename=txt_file, results=get_results, workbook=workbook, output_file=output_file)
                     text_files_processed = True
-                    logger.info(f"Processed file {txt_file}")
+                    logger.info(f"Processed file {txt_file} - {text_files_processed}")
                 except Exception as e:
                     logger.error(f"Error processing file {txt_file}: {e}", stack_info=True, exc_info=True, extra={'file': txt_file})
             if not text_files_processed:
                 logger.error('No text files found in Excel')
             moveTxtSrcToDest(OUTDIR, BACKUPDIR)
+
+            if text_files_processed:
+                logger.info(f"Updated Excel file {output_file}")
+                # check if there is anything left in TEMPDIR
+                if not os.listdir(TEMPDIR):
+                    # logger.info("TEMPDIR is empty")
+                    pass
+                else:
+                    # logger.error(f"TEMPDIR is not empty: {os.listdir(TEMPDIR)}")
+                    delAll(TEMPDIR, '.txt')
+                    # delAll(TEMPDIR, '.log')
         except Exception as e:
             logger.error(f"Error in main function: {e}")
     except Exception as e:
         logger.error(f"Error in main function: {e}")
+    try:
+        logsBACKUPDIR = os.path.join(BACKUPDIR, "logs")
+        cleanUpCrew(indir=INDIR, outdir=logsBACKUPDIR)
+        logger.info(f"Cleaned up crew complete {INDIR} to {BACKUPDIR}")
+    except Exception as e:
+        logger.error(f"Error in cleanUpCrew: {e}")
+
+    # ! Twister section
+    try:
+        DNSTWISTFOLDER = 'output/dnstwist'
+        copyRecurse(DNSTWISTFOLDER, INDIR, extension='.csv')
+        copyRecurse(DNSTWISTFOLDER, BACKUPDIR, extension='.png')
+        createTwisterResults(input_dir=INDIR, output_file=TWISTEROUTFILE)
+        logger.info(f"Created Twister Results file {TWISTEROUTFILE}")
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
 
 
 if __name__ == "__main__":
