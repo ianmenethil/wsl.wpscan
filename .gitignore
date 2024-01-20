@@ -1,3 +1,13 @@
+*.log
+*.txt
+*.json
+*.xlsx
+*.csv
+*.conf
+*.yaml
+*.png
+*.mmdb
+WPScan/output/
 config.yaml
 cache/
 __pycache__
@@ -16,3 +26,10 @@ wpscan - Shortcut.lnk
 data1/
 logs/
 json2csv.py
+libcurl_fix/
+output/
+Excel
+_configs/
+screenshots/
+backup/
+master/
