@@ -8,9 +8,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 import zipfile
+import shutil
 from rich.logging import RichHandler
 import yaml
-import shutil
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO,
@@ -56,43 +56,78 @@ def read_config_file() -> Optional[dict[str, Any]]:
 
 
 def send_email(config, output_files, scan_type) -> None:
-    """
-    Send email with attachment
-    """
+    """Send email with attachment, customized based on scan type."""
     message = MIMEMultipart('alternative')
     message['From'] = f"Zen Alerts <{config['SENDER_EMAIL']}>"
-    message['To'] = f"<{config['RECEIVER_EMAIL']}>"
-    message['Subject'] = f"{scan_type} Scan Results - {TODAYIS}"
+    recipients = config['RECEIVER_EMAIL']
+    if isinstance(recipients, str):  # For backward compatibility
+        recipients = [recipients]
+    message['To'] = ', '.join(recipients)
 
-    # Email body in HTML
-    body_html = f"""
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; }}
-            .header {{ background-color: #4CAF50; color: white; padding: 10px; text-align: center; }}
-            .content {{ padding: 20px; }}
-            .footer {{ background-color: #f2f2f2; color: black; padding: 10px; text-align: center; font-size: 0.8em; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>{scan_type} Scan Results</h1>
-        </div>
-        <div class="content">
-            <p>The attached file(s) contains the results of the recent {scan_type} scan.</p>
-            <p>Please review the attached documents for details.</p>
-        </div>
-        <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-        </div>
-    </body>
-    </html>
-    """
+    # ! DNSTwist email customization
+    if scan_type == 'DNSTwist':
+        subject = f"DNSTwist Domain Security Alert - {TODAYIS}"
+        body_html = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .header {{ background-color: #007bff; color: white; padding: 10px; text-align: center; }}
+                .content {{ padding: 20px; }}
+                .footer {{ background-color: #f2f2f2; color: black; padding: 10px; text-align: center; font-size: 0.8em; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>{scan_type} Domain Security Report</h1>
+            </div>
+            <div class="content">
+                <p>This email contains important information regarding potential security risks identified in your domain names. The attached file(s) includes a detailed analysis of similar-looking domains that could be used for malicious purposes.</p>
+                <p>It is crucial to review these findings to protect your domain's integrity and prevent potential phishing attacks.</p>
+                <p>Please review the attached documents for details.</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated vulnerability alert. Please do not reply to this email.</p>
+                <p style="color: purple; font-style: italic;">For any questions, please email <a href="mailto:ian@zenithpayments.com.au">ian@zenithpayments.com.au</a></p>
+            </div>
+        </body>
+        </html>
+        """
+        body_text = f"DNSTwist Domain Security Alert - {TODAYIS}\nPlease review the attached security report for details."
 
-    # Plain-text version of the body
-    body_text = f"{scan_type} Scan Results - {TODAYIS}\nPlease review the attached documents for details."
+    # WPScan email customization
+    elif scan_type == 'WPScan':
+        subject = f"WPScan Vulnerability Report - {TODAYIS}"
+        body_html = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .header {{ background-color: #dc3545; color: white; padding: 10px; text-align: center; }}
+                .content {{ padding: 20px; }}
+                .footer {{ background-color: #f2f2f2; color: black; padding: 10px; text-align: center; font-size: 0.8em; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>{scan_type} Website Vulnerability Insights</h1>
+            </div>
+            <div class="content">
+                <p>The attached file(s) contains an in-depth analysis of your WordPress site's vulnerabilities. This report highlights potential security risks that could compromise your website's integrity and the safety of its users.</p>
+                <p>All vulnerabilities must be reviewed carefully to ensure the highest level of security.</p>
+                <p>Please review the attached documents for details.</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated vulnerability alert. Please do not reply to this email.</p>
+                <p style="color: purple; font-style: italic;">For any questions, please email <a href="mailto:ian@zenithpayments.com.au">ian@zenithpayments.com.au</a></p>
+            </div>
+        </body>
+        </html>
+        """
+        body_text = f"WPScan Vulnerability Report - {TODAYIS}\nPlease review the attached document for detailed insights."
+    message['Subject'] = subject
 
+    # Attach text and HTML parts
     text_part = MIMEText(body_text, "plain")
     html_part = MIMEText(body_html, "html")
     message.attach(text_part)
@@ -125,7 +160,7 @@ def send_email(config, output_files, scan_type) -> None:
         with smtplib.SMTP(config['SMTPSERVER'], int(config['SMTPPORT']), local_hostname='localhost') as server:
             server.starttls()
             server.login(user=config['SENDER_EMAIL'], password=config['SENDER_PASSWORD'])
-            server.sendmail(from_addr=config['SENDER_EMAIL'], to_addrs=config['RECEIVER_EMAIL'], msg=message.as_string())
+            server.sendmail(from_addr=config['SENDER_EMAIL'], to_addrs=recipients, msg=message.as_string())
     except smtplib.SMTPException as error:
         logger.error("An error occurred while sending the email: %s", error)
     else:
@@ -133,11 +168,12 @@ def send_email(config, output_files, scan_type) -> None:
 
 
 def zipScreenshotsDIR(folder) -> str | None:
-    """
-    Zip screenshots folder
-    """
+    """Zip screenshots folder"""
+    zip_file_name = f'{folder}.zip'
+    if os.path.exists(zip_file_name):
+        return zip_file_name
+
     try:
-        zip_file_name = f'{folder}.zip'
         with zipfile.ZipFile(zip_file_name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for root, _, files in os.walk(folder):
                 for file in files:

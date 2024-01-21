@@ -198,27 +198,63 @@ def copyRecurse(source_dir, destination_dir, extension='.txt') -> bool:
     return True
 
 
-def moveTxtSrcToDest(sourceDir, destDir) -> None:
+def copyCsvFiles(source_dir, destination_dir) -> bool:
+    """Copy all CSV files from a directory recursively to the destination directory."""
+    try:
+        if os.path.isdir(source_dir):
+            files = os.listdir(source_dir)
+            for file in files:
+                src_file = os.path.join(source_dir, file)
+                if os.path.isdir(src_file):
+                    copyCsvFiles(src_file, destination_dir)  # Call the function recursively
+                else:
+                    if file.endswith('.csv'):
+                        dest_file = os.path.join(destination_dir, file)
+                        shutil.copyfile(src_file, dest_file)
+                        # logger.info(f'Copying CSV files {src_file} to {dest_file}')
+        else:
+            if source_dir.endswith('.csv'):
+                shutil.copyfile(source_dir, destination_dir)
+            return True
+    except Exception as e:
+        logger.error(f'Error in copying CSV files: {e}')
+        return False
+    return False
+
+
+def moveLogsToBackup(sourceDir, destDir) -> None:
     try:
         if os.path.isdir(sourceDir):
             files = os.listdir(sourceDir)
             for file in files:
                 src_file = os.path.join(sourceDir, file)
                 dest_file = os.path.join(destDir, file)
-                if file.endswith('.txt') and src_file != dest_file:
+                if file.endswith('.txt') or file.endswith('.csv') or file.endswith('.log') and src_file != dest_file:
                     shutil.move(src_file, dest_file)
     except Exception as e:
         logger.error(e)
 
 
-def setupDirs(outdir, tempdir, backupdir) -> None:
+def setupDirs(OUTDIR, TEMPDIR, BACKUPDIR, TWISTERDIR, LOGSBACKUPDIR, DNSTWISTDIR) -> None:
     """ Ensure necessary directories exist. """
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-    if not os.path.exists(tempdir):
-        os.makedirs(tempdir)
-    if not os.path.exists(backupdir):
-        os.makedirs(backupdir)
+    try:
+
+        def create_directory(directory) -> None:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+                # logger.info(f"Created directory: {directory}")
+            else:
+                pass
+                # logger.warning(f"Directory already exists: {directory}")
+
+        create_directory(OUTDIR)
+        create_directory(TEMPDIR)
+        create_directory(BACKUPDIR)
+        create_directory(TWISTERDIR)
+        create_directory(LOGSBACKUPDIR)
+        create_directory(DNSTWISTDIR)
+    except Exception as e:
+        logger.error(f'Error in setting up directories: {e}')
 
 
 def cleanLogsHelper(file_path, start_line) -> Any:
@@ -243,7 +279,7 @@ def cleanLogsHelper(file_path, start_line) -> Any:
             lines = lines[start_index:end_index]
         elif start_index is not None:
             lines = lines[start_index:]
-        new_file_path = file_path.rsplit('.', 1)[0] + '.txt'  # Save as .txt file
+        new_file_path = file_path.rsplit('.', 1)[0] + '.txt'
         with open(new_file_path, 'w', encoding='utf-8') as file:
             file.writelines(lines)
     except Exception as e:
@@ -265,15 +301,15 @@ def cleanLogs(directory, update_line="[i] Updating the Database ...") -> None:
 section_start_interesting_findings = 'Interesting Finding(s):'
 section_end_interesting_findings = '[i] The main theme could not be detected.'
 section_start_vuln_plugins = r"\[\+\] Enumerating Vulnerable Plugins.*"
-section_end_vuln_plugins = '[i] No plugins Found.' or '[+] Enumerating Vulnerable Themes (via Aggressive Methods)'  # Enumerating Vulnerable Themes means plugins were found
+section_end_vuln_plugins = '[i] No plugins Found.' or '[+] Enumerating Vulnerable Themes (via Aggressive Methods)'  # pylint: disable=line-too-long
 section_start_vuln_themes = '[+] Enumerating Vulnerable Themes (via Aggressive Methods)'
 section_end_vuln_themes = r"\[\+\] Enumerating Timthumbs.*"
 section_start_timthumbs = '[+] Enumerating Timthumbs (via Aggressive Methods)'
-section_end_timthumbs = '[i] No Timthumbs Found.' or '[+] Enumerating Config Backups (via Aggressive Methods)'  # Enumerating Config Backups means timthumbs were found
+section_end_timthumbs = '[i] No Timthumbs Found.' or '[+] Enumerating Config Backups (via Aggressive Methods)'  # pylint: disable=line-too-long
 section_start_config_backups = '[+] Enumerating Config Backups (via Aggressive Methods)'
-section_end_config_backups = '[i] No Config Backups Found.' or '[+] Enumerating DB Exports (via Aggressive Methods)'  # Enumerating DB Exports means config backups were found
+section_end_config_backups = '[i] No Config Backups Found.' or '[+] Enumerating DB Exports (via Aggressive Methods)'  # pylint: disable=line-too-long
 section_start_db_exports = '[+] Enumerating DB Exports (via Aggressive Methods)'
-section_end_db_exports = '[i] No DB Exports Found.' or '[+] Enumerating Users (via Aggressive Methods)'  # Enumerating Users means DB Exports were found
+section_end_db_exports = '[i] No DB Exports Found.' or '[+] Enumerating Users (via Aggressive Methods)'  # pylint: disable=line-too-long
 section_start_users = '[+] Enumerating Users (via Aggressive Methods)'
 section_end_users = '[i] User(s) Identified:' or '[+] WPScan DB API OK'  # WPScan DB API OK means no users were identified
 
@@ -291,7 +327,7 @@ def processFileForResults(txt_filename) -> list[Any]:
     in_themes_section = False  # Flag to check if we are in the themes section
     interesting_findings = ''
 
-    for i, line in enumerate(lines):
+    for _, line in enumerate(lines):
         line = line.strip()
         if in_interesting_findings:
             if line in [section_end_interesting_findings, '[i]']:
@@ -313,10 +349,12 @@ def processFileForResults(txt_filename) -> list[Any]:
                 # Capture the plugin/theme name
                 current_item = line.split('/')[-2]
                 current_details = line + '\n'  # Start accumulating the details
+                # current_details = line  # Start accumulating the details
                 current_vuln_count = ''  # Reset the vulnerability count for the new item
             elif '| [!]' in line:
                 # Vulnerability detail line
                 current_details += line + '\n'  # Accumulate details
+                # current_details += line  # Accumulate details
                 if 'vulnerabilities identified:' in line or 'vulnerability identified:' in line:
                     current_vuln_count = line.split(' ')[2]  # Capture vulnerability count
             elif line in [section_end_vuln_plugins, section_start_vuln_themes]:
@@ -337,8 +375,6 @@ def processFileForResults(txt_filename) -> list[Any]:
                     current_details = ''
                     current_vuln_count = ''
             elif re.match(section_end_vuln_themes, line):
-                # logger.warning(f"Found section_end_vuln_themes {line} match {section_end_vuln_themes}")
-                # elif line == section_end_vuln_themes:
                 # End of themes section
                 in_themes_section = False
                 if current_item:
@@ -359,11 +395,9 @@ def processFileForResults(txt_filename) -> list[Any]:
         elif line == section_start_interesting_findings:
             in_interesting_findings = True
         elif re.search(section_start_vuln_plugins, line) or re.search('[i] Plugin(s) Identified:', line):
-            # elif line == section_start_vuln_plugins or '[i] Plugin(s) Identified:' in line:
             in_plugins_section = True
             in_themes_section = False
         elif re.search(section_start_vuln_themes, line) or re.search('[i] Theme(s) Identified:', line):
-            # elif line == section_start_vuln_themes or '[i] Theme(s) Identified:' in line:
             in_plugins_section = True
             in_themes_section = False
     # Capture the last item after the loop ends, if any
@@ -410,44 +444,26 @@ def saveToExcel(txt_filename, results, workbook, output_file) -> bool:
         return False
 
 
-def cleanUpCrew(indir, outdir) -> None:
-    try:
-        copy = copyRecurse(indir, outdir, extension='.log')
-        logger.info(f'Copying files from {indir} to {outdir}')
-        if copy:
-            delAll(indir, '.log')
-            logger.info(f'Deleting files from {indir}')
-    except Exception as e:
-        logger.error(f"Error in copyRecurse: {e}")
-
-
 def createTwisterResults(input_dir, output_file) -> bool:
     try:
         workbook = openpyxl.Workbook()
         workbook.remove(workbook.active)  # Remove the default sheet
-
         all_data = []
-
+        results_sheet = workbook.create_sheet(title='All Results')
+        headers = ['Type', 'Domain', 'IP Address', 'NS', 'MX', 'HTTP', 'SMTP', 'ESMTP', 'PHASH']
+        results_sheet.append(headers)
         for root, _, files in os.walk(input_dir):
             logger.info(f'Processing files in {root}')
-            # logger.info(f'Files: {files}')
             for file in files:
                 if file.endswith('.csv'):
-                    logger.info(f'Processing CSV file {file}')
                     with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
                         reader = csv.reader(f)
                         data = list(reader)
                         all_data.extend(data)  # Append data for All Results sheet
-                        logger.info(f'Data read from {file}')
                         sheet = workbook.create_sheet(title=os.path.splitext(file)[0])
-                        logger.info(f'Created sheet {sheet.title}')
+                        logger.info(f'Data read from {file}')
                         for row in data:
                             sheet.append(row)
-
-        # Create 'All Results' sheet
-        results_sheet = workbook.create_sheet(title='All Results')
-        headers = ['Type', 'Domain', 'IP Address', 'NS', 'MX', 'HTTP', 'SMTP', 'ESMTP', 'PHASH']
-        results_sheet.append(headers)
         for row in all_data:
             results_sheet.append(row)
         workbook.save(output_file)
@@ -459,23 +475,24 @@ def createTwisterResults(input_dir, output_file) -> bool:
 
 def main() -> None:
     TODAYIS = datetime.datetime.now().strftime('%d-%m-%y')
-    OUTDIR, TEMPDIR, TWISTERDIR, BACKUPDIR = 'Excel', 'Excel/temp', 'Excel/DNSTwist', f'Excel/backup_{TODAYIS}'
-    # delAll(OUTDIR, '.xlsx')
-    output_file = 'WPScanResults_' + TODAYIS + '.xlsx'
-    OUTFILE = os.path.join(OUTDIR, output_file)
-    tw_output_file = 'DNSTwistResults_' + TODAYIS + '.xlsx'
-    TWISTEROUTFILE = os.path.join(TWISTERDIR, tw_output_file)
+    OUTDIR = 'Excel'
+    TEMPDIR = 'Excel/temp'
+    TWISTERDIR = 'Excel/DNSTwist'
+    BACKUPDIR = f'Excel/backup_{TODAYIS}'
+    LOGSBACKUPDIR = f'Excel/backup_{TODAYIS}/logs'
+    DNSTWISTDIR = 'output/dnstwist'
+    WPScan_EXCEL = 'WPScanResults_' + TODAYIS + '.xlsx'
+    DNSTwist_EXCEL = 'DNSTwistResults_' + TODAYIS + '.xlsx'
+    OUTFILE = os.path.join(OUTDIR, WPScan_EXCEL)
+    TWISTEROUTFILE = os.path.join(TWISTERDIR, DNSTwist_EXCEL)
     INDIR = 'logs'
     try:
-        setupDirs(OUTDIR, TEMPDIR, BACKUPDIR)
-        output_file = getUniqueFilename(OUTFILE) if os.path.exists(OUTFILE) else OUTFILE
-        logger.info(f"Output file is set to {output_file}")
-
+        setupDirs(OUTDIR, TEMPDIR, BACKUPDIR, TWISTERDIR, LOGSBACKUPDIR, DNSTWISTDIR)
+        WPScan_EXCEL = getUniqueFilename(OUTFILE) if os.path.exists(OUTFILE) else OUTFILE
+        logger.info(f"Output file is set to {WPScan_EXCEL}")
         if not os.path.exists(INDIR):
             logger.error(f"Input directory {INDIR} does not exist")
             exit()
-        logger.info(f'Input directory {INDIR} exists')
-
         copyRecurse(INDIR, TEMPDIR, extension='.log')
         try:
             cleanLogs(TEMPDIR)
@@ -485,10 +502,9 @@ def main() -> None:
         copyRecurse(TEMPDIR, OUTDIR, extension='.txt')
         delAll(TEMPDIR, '.txt')
         delAll(TEMPDIR, '.log')
-        # check if there is anything left in TEMPDIR
         if not os.listdir(TEMPDIR):
             logger.info("TEMPDIR is empty")
-        workbook = getWorkbook(output_file)
+        workbook = getWorkbook(WPScan_EXCEL)
         if 'Sheet' in workbook.sheetnames:
             del workbook['Sheet']
         if 'Results' not in workbook.sheetnames:
@@ -498,50 +514,40 @@ def main() -> None:
         else:
             results_sheet = workbook['Results']
             logger.info("'Results' sheet already exists")
-
         text_files_processed = False
         try:
             for txt_file in getAllTxtInDir(OUTDIR):
-                # logger.info(f"Processing file: {txt_file}")
                 try:
                     get_results = processFileForResults(txt_file)
-                    saveToExcel(txt_filename=txt_file, results=get_results, workbook=workbook, output_file=output_file)
+                    saveToExcel(txt_filename=txt_file, results=get_results, workbook=workbook, output_file=WPScan_EXCEL)
                     text_files_processed = True
-                    logger.info(f"Processed file {txt_file} - {text_files_processed}")
                 except Exception as e:
                     logger.error(f"Error processing file {txt_file}: {e}", stack_info=True, exc_info=True, extra={'file': txt_file})
             if not text_files_processed:
                 logger.error('No text files found in Excel')
-            moveTxtSrcToDest(OUTDIR, BACKUPDIR)
-
             if text_files_processed:
-                logger.info(f"Updated Excel file {output_file}")
-                # check if there is anything left in TEMPDIR
+                logger.info(f"Updated Excel file {WPScan_EXCEL}")
                 if not os.listdir(TEMPDIR):
-                    # logger.info("TEMPDIR is empty")
                     pass
                 else:
+                    pass
                     # logger.error(f"TEMPDIR is not empty: {os.listdir(TEMPDIR)}")
-                    delAll(TEMPDIR, '.txt')
+                    # delAll(TEMPDIR, '.txt')
                     # delAll(TEMPDIR, '.log')
         except Exception as e:
             logger.error(f"Error in main function: {e}")
     except Exception as e:
         logger.error(f"Error in main function: {e}")
-    try:
-        logsBACKUPDIR = os.path.join(BACKUPDIR, "logs")
-        cleanUpCrew(indir=INDIR, outdir=logsBACKUPDIR)
-        logger.info(f"Cleaned up crew complete {INDIR} to {BACKUPDIR}")
-    except Exception as e:
-        logger.error(f"Error in cleanUpCrew: {e}")
 
     # ! Twister section
     try:
-        DNSTWISTFOLDER = 'output/dnstwist'
-        copyRecurse(DNSTWISTFOLDER, INDIR, extension='.csv')
-        copyRecurse(DNSTWISTFOLDER, BACKUPDIR, extension='.png')
+        moveLogsToBackup(INDIR, LOGSBACKUPDIR)
+        moveLogsToBackup(OUTDIR, BACKUPDIR)
+        copyCsvFiles(DNSTWISTDIR, INDIR)
+        copyRecurse(DNSTWISTDIR, BACKUPDIR, extension='.png')
         createTwisterResults(input_dir=INDIR, output_file=TWISTEROUTFILE)
-        logger.info(f"Created Twister Results file {TWISTEROUTFILE}")
+        copyRecurse(DNSTWISTDIR, BACKUPDIR, extension='.csv')
+        delAll(INDIR, '.csv')
     except Exception as e:
         logger.error(f"Error in main: {e}")
 

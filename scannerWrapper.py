@@ -30,13 +30,7 @@ logger = logging.getLogger()  # pylint: disable=invalid-name
 directories = [
     "output",
     "output/wpscan",
-    # "output/wpscan/zenpay",
-    # "output/wpscan/sc",
-    # "output/wpscan/pre",
-    # "output/wpscan/test",
     "output/dnstwist",
-    # "output/dnstwist/zenpay",
-    # "output/dnstwist/test",
     "output/wpwatcher-output",
     "logs"  # pylint: disable=line-too-long
 ]
