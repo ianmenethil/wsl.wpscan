@@ -1,4 +1,4 @@
-# wrapper.py
+# scannerWrapper.py
 import os
 import subprocess
 import logging

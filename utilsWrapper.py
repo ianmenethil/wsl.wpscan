@@ -1,4 +1,4 @@
-# wrapper.py
+# utilsWrapper.py
 import subprocess
 import logging
 from rich.logging import RichHandler
@@ -27,10 +27,17 @@ logger = logging.getLogger()  # pylint: disable=invalid-name
 
 def main() -> None:
     try:
-        action = {"1": "Create Reports", "2": "Send Reports"}.get(input("Action to perform (1. Create Reports, 2. Send Reports): "), "")
-        if action == "Create Reports":  # If "Scan All Sites" is selected
+        action = {
+            "1": "Create Reports",
+            "2": "Send Reports",
+            "3": "Both"
+        }.get(input("Action to perform (1. Create Reports, 2. Send Reports, 3. Both): "), "")
+        if action == "Create Reports":  # If "Create Reports" is selected
             subprocess.run(["python", "summarizeScans.py"], check=True)
-        elif action == "Send Reports":  # If "Scan All Sites" is selected
+        elif action == "Send Reports":  # If "Send Reports" is selected
+            subprocess.run(["python", "mailer.py"], check=True)
+        elif action == "Both":  # If "Both" is selected
+            subprocess.run(["python", "summarizeScans.py"], check=True)
             subprocess.run(["python", "mailer.py"], check=True)
     except Exception as e:
         logger.error(f"An error occurred: {e}")
